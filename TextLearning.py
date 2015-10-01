@@ -20,5 +20,10 @@ bag_of_words = vectorizer.transform(email_list)
 #Returns the position of the word 'great'
 
 sw = stopwords.words('english')
-nltk.download()
-#sw[0]
+#nltk.download()
+print len(sw)
+
+###Stemming with NLTK
+from nltk.stem.snowball import SnowballStemmer
+stemmer = SnowballStemmer('english')
+print stemmer.stem('responsiveness')

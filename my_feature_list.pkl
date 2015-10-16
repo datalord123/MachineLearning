@@ -1,0 +1,14 @@
+(lp0
+S'poi'
+p1
+aS'salary'
+p2
+aS'exercised_stock_options'
+p3
+aS'long_term_incentive'
+p4
+aS'from_messages'
+p5
+aS'fraction_to_poi'
+p6
+a.

@@ -128,6 +128,7 @@ def AddFeatures(data_dict):
 ### The first feature must be "poi".
 data_dict=AddFeatures(data_dict)
 keys = next(data_dict.itervalues()).keys()
+#print keys
 '''
 #Potential Features
 'salary', 'to_messages', 'deferral_payments', 'total_payments', 'exercised_stock_options', 
@@ -139,13 +140,7 @@ keys = next(data_dict.itervalues()).keys()
 ##Added
 fraction_from_poi,fraction_to_poi
 '''
-features_list=['poi','salary','exercised_stock_options','long_term_incentive','from_messages','fraction_to_poi']
-#Convert dictinonary to numpy array.
-data = featureFormat(data_dict,features_list,sort_keys = True)
-### Extract features and labels from dataset for local testing
-labels, features = targetFeatureSplit(data)
-#Plot_3_Clustoids_BeforeScaling(labels,features)
-#Plot_3_Clustoids_AfterScaling(labels,features)
+
 
 ### Task 4: Try a varity of classifiers
 ### Please name your classifier clf for easy export below.
@@ -154,6 +149,7 @@ labels, features = targetFeatureSplit(data)
 ### http://scikit-learn.org/stable/modules/pipeline.html
 
 # Provided to give you a starting point. Try a variety of classifiers.
+#Decent Results
 def GNBAccuracy(features, labels):
     ##Using smaller training data
     #clf = SVC(kernel='linear')
@@ -170,6 +166,7 @@ def GNBAccuracy(features, labels):
     print 'Naive Bayes recall:',recall_score(labels,pred)
     return clf
 
+#Takes a LONG Time
 def SVMAccuracy(features, labels):
     ##Using smaller training data
     clf = SVC(kernel='linear')
@@ -185,7 +182,7 @@ def SVMAccuracy(features, labels):
     print 'SVM Precision:',precision_score(labels,pred)
     print 'SVM recall:',recall_score(labels,pred)
     return clf
-
+#Overfits
 def DTAccuracy(features, labels):
     clf = tree.DecisionTreeClassifier(min_samples_split=2)
     t0 = time()
@@ -200,13 +197,6 @@ def DTAccuracy(features, labels):
     print 'DT recall:',recall_score(labels,pred)
     return clf
 
-#Decent Results
-#GNBAccuracy(features, labels)
-#Takes a LONG Time
-SVMAccuracy(features, labels)
-#Overfits
-#clf=DTAccuracy(features, labels)
-
 #########################################################
 ### Task 5: Tune your classifier to achieve better than .3 precision and recall 
 ### using our testing script. Check the tester.py script in the final project
@@ -214,11 +204,6 @@ SVMAccuracy(features, labels)
 ### function. Because of the small size of the dataset, the script uses
 ### stratified shuffle split cross validation. For more info: 
 ### http://scikit-learn.org/stable/modules/generated/sklearn.cross_validation.StratifiedShuffleSplit.html
-
-# Example starting point. Try investigating other evaluation techniques!
-from sklearn.cross_validation import train_test_split
-features_train, features_test, labels_train, labels_test = \
-    train_test_split(features, labels, test_size=0.3, random_state=42)
 
 def GNBAccuracySplit(features_train, labels_train, features_test, labels_test):
     ##Using smaller training data
@@ -236,11 +221,24 @@ def GNBAccuracySplit(features_train, labels_train, features_test, labels_test):
     print 'Naive Bayes(Split) recall:',recall_score(labels_test,pred)
     return clf   
 
-clf=GNBAccuracySplit(features_train, labels_train, features_test, labels_test)    
-
 ### Task 6: Dump your classifier, dataset, and features_list so anyone can
 ### check your results. You do not need to change anything below, but make sure
 ### that the version of poi_id.py that you submit can be run on its own and
 ### generates the necessary .pkl files for validating your results.
 
-dump_classifier_and_data(clf, data_dict, features_list)
+def main(data_dict):
+    QueryDataSet(data_dict)
+    features_list=['poi','salary','exercised_stock_options','long_term_incentive','from_messages','fraction_to_poi']
+    #Convert dictinonary to numpy array.
+    data = featureFormat(data_dict,features_list,sort_keys = True)
+    ### Extract features and labels from dataset for local testing
+    labels, features = targetFeatureSplit(data)
+    #Plot_3_Clustoids_BeforeScaling(labels,features)
+    #Plot_3_Clustoids_AfterScaling(labels,features)
+    GNBAccuracy(features, labels)
+    features_train, features_test, labels_train, labels_test = \
+    train_test_split(features, labels, test_size=0.3, random_state=42)
+    clf=GNBAccuracySplit(features_train, labels_train, features_test, labels_test)    
+    dump_classifier_and_data(clf, data_dict, features_list)
+    
+main(data_dict)

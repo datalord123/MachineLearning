@@ -29,18 +29,11 @@ def test_classifier(clf, dataset, feature_list, folds = 1000):
     false_negatives = 0
     true_positives = 0
     false_positives = 0
-    for train_idx, test_idx in cv: 
-        features_train = []
-        features_test  = []
-        labels_train   = []
-        labels_test    = []
-        for ii in train_idx:
-            features_train.append( features[ii] )
-            labels_train.append( labels[ii] )
-        for jj in test_idx:
-            features_test.append( features[jj] )
-            labels_test.append( labels[jj] )
-        
+    for train_indices, test_indices in cv:
+        features_train = [features[ii] for ii in train_indices]
+        features_test = [features[ii] for ii in test_indices]
+        labels_train = [labels[ii] for ii in train_indices]
+        labels_test = [labels[ii] for ii in test_indices]        
         ### fit the classifier using training set, and test on test set
         clf.fit(features_train, labels_train)
         predictions = clf.predict(features_test)

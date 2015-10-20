@@ -18,25 +18,33 @@ from sklearn.naive_bayes import GaussianNB
 from sklearn import tree
 from sklearn.metrics import precision_score
 from sklearn.metrics import recall_score
+from sklearn.metrics import f1_score
 from time import time
-
+from sklearn.cross_validation import KFold
+from sklearn.grid_search import GridSearchCV
+from sklearn.cross_validation import StratifiedShuffleSplit
 
 def QueryDataSet(data_dict):
-	print 'Total Number of Data Points:',len(data_dict)
-	print 'Number POIs:',sum(1 for v in data_dict.values() if v['poi']==True)
-	print 'Number non-POIs:',sum(1 for v in data_dict.values() if v['poi']==False)
-	keys = next(data_dict.itervalues()).keys()
-	print 'Number of Features:', len(keys)
-	FeatWNaN=dict.fromkeys(keys,0)
+    print 'Total Number of Data Points:',len(data_dict)
+    print 'Number POIs:',sum(1 for v in data_dict.values() if v['poi']==True)
+    print 'Number non-POIs:',sum(1 for v in data_dict.values() if v['poi']==False)
+    keys = next(data_dict.itervalues()).keys()
+    print 'Number of Features:', len(keys)
+    FeatWNaN=dict.fromkeys(keys,0)
+    FeatWNaNPOI=dict.fromkeys(keys,0)
 	#Count the number of Missing values
-	for k,v in data_dict.iteritems():
-		for i in v:
-			if v[i] == 'NaN':
-				FeatWNaN[i]+=1
-	df = pd.DataFrame.from_dict(FeatWNaN, orient='index')
-	df = df.rename(columns = {0: 'Missing Vals'})
-	df['Existing Values'] = len(data_dict)-df['Missing Vals']
-	print df.sort('Missing Vals',ascending=0)
+    for k,v in data_dict.iteritems():
+        for i in v:
+            if v[i] == 'NaN':
+                FeatWNaN[i]+=1
+            if v[i] == 'NaN' and v['poi']==True:
+                FeatWNaNPOI[i]+=1
+    df = pd.DataFrame.from_dict(FeatWNaN, orient='index')
+    df = df.rename(columns = {0: 'Missing Vals'})
+    dfPOI = pd.DataFrame.from_dict(FeatWNaNPOI, orient='index')
+    dfPOI = dfPOI.rename(columns = {0: 'Missing Vals POI'})
+    df=df.join(dfPOI)    
+    print df.sort('Missing Vals',ascending=0)
 
 def PlotData(target,features,Title):
     data_color = "b"
@@ -84,9 +92,8 @@ def Plot_3_Clustoids_AfterScaling(poi,finance_features):
 ### Load the dictionary containing the dataset
 ### Task 1: Select what features you'll use.
 data_dict = pickle.load(open("final_project_dataset.pkl", "r"))
-
 ### Task 2: Remove outliers
-def PlotReg(Title):
+def PlotReg(data_dict,Title):
     RegFeatures = ["salary", "bonus"]
     data = featureFormat( data_dict, RegFeatures, remove_any_zeroes=True)
     target, features = targetFeatureSplit(data)
@@ -95,10 +102,6 @@ def PlotReg(Title):
 def RmOutliers(data_dict):
     data_dict.pop('TOTAL')   
     return data_dict    
-
-#PlotReg('With Outlier(s)')
-data_dict=RmOutliers(data_dict)
-#PlotReg('Without Outlier(s)')
 
 ### Task 3: Create new feature(s)
 
@@ -150,52 +153,54 @@ fraction_from_poi,fraction_to_poi
 
 # Provided to give you a starting point. Try a variety of classifiers.
 #Decent Results
+
 def GNBAccuracy(features, labels):
     ##Using smaller training data
     #clf = SVC(kernel='linear')
-    clf = GaussianNB()
+    clf_NB = GaussianNB()
     t0 = time()
-    clf.fit(features,labels)
+    #kf=KFold(len(features))
+    clf_NB.fit(features,labels)
     print "training time:", round(time()-t0, 3), "s"
     t0 = time()
-    pred = clf.predict(features)
+    pred = clf_NB.predict(features)
     print 'predicting time',round(time()-t0,3),'s'
     accuracy = accuracy_score(labels,pred)
     print 'Naive Bayes Accuracy:',accuracy_score(labels,pred)
     print 'Naive Bayes Precision:',precision_score(labels,pred)
     print 'Naive Bayes recall:',recall_score(labels,pred)
-    return clf
+    return clf_NB
 
-#Takes a LONG Time
+#Ovefits
 def SVMAccuracy(features, labels):
     ##Using smaller training data
-    clf = SVC(kernel='linear')
+    clf_SVM = SVC(kernel='rbf')
     #clf = SVC(C=10000,kernel='rbf')
     t0 = time()
-    clf.fit(features,labels)
+    clf_SVM.fit(features,labels)
     print "training time:", round(time()-t0, 3), "s"
     t0 = time()
-    pred = clf.predict(features)
+    pred = clf_SVM.predict(features)
     print 'predicting time',round(time()-t0,3),'s'
     accuracy = accuracy_score(labels,pred)
     print 'SVM Accuracy:',accuracy_score(labels,pred)
     print 'SVM Precision:',precision_score(labels,pred)
     print 'SVM recall:',recall_score(labels,pred)
-    return clf
+    return clf_SVM
 #Overfits
 def DTAccuracy(features, labels):
-    clf = tree.DecisionTreeClassifier(min_samples_split=2)
+    clf_DT = tree.DecisionTreeClassifier(min_samples_split=2)
     t0 = time()
-    clf.fit(features,labels)
+    clf_DT.fit(features,labels)
     print "training time:", round(time()-t0, 3), "s"
     t0 = time()
-    pred = clf.predict(features)
+    pred = clf_DT.predict(features)
     print 'predicting time',round(time()-t0,3),'s'
     accuracy = accuracy_score(labels,pred)
     print 'DT Accuracy:',accuracy_score(labels,pred)
     print 'DT Precision:',precision_score(labels,pred)
     print 'DT recall:',recall_score(labels,pred)
-    return clf
+    return clf_DT
 
 #########################################################
 ### Task 5: Tune your classifier to achieve better than .3 precision and recall 
@@ -204,41 +209,110 @@ def DTAccuracy(features, labels):
 ### function. Because of the small size of the dataset, the script uses
 ### stratified shuffle split cross validation. For more info: 
 ### http://scikit-learn.org/stable/modules/generated/sklearn.cross_validation.StratifiedShuffleSplit.html
-
-def GNBAccuracySplit(features_train, labels_train, features_test, labels_test):
-    ##Using smaller training data
-    #clf = SVC(kernel='linear')
-    clf = GaussianNB()
-    t0 = time()
-    clf.fit(features_train,labels_train)
+'''
+def GNBAccuracyKFold(features, labels):
+    #parameters = {'kernel':('linear', 'rbf'), 'C':[1, 10]}             
+    clf_NB = GaussianNB()
+    folds=10
+    cv = StratifiedShuffleSplit(labels, folds, random_state = 42)
+    true_negatives = 0
+    false_negatives = 0
+    true_positives = 0
+    false_positives = 0
+    for train_indices, test_indices in cv:
+        ##The Features and Labels Values in the loop...What are they?
+        features_train = [features[ii] for ii in train_indices]
+        features_test = [features[ii] for ii in test_indices]
+        labels_train = [labels[ii] for ii in train_indices]
+        labels_test = [labels[ii] for ii in test_indices]
+        t0 = time()
+        #### FOR SOME REASON SCLAING HAS NO IMPACT
+        scaler = MinMaxScaler()
+        features_train = scaler.fit_transform(features_train)            
+        features_test = scaler.fit_transform(features_test)
+        clf_NB.fit(features_train, labels_train)
+        pred = clf_NB.predict(features_test) 
+        for prediction, truth in zip(pred, labels_test):
+            if prediction == 0 and truth == 0:
+                true_negatives += 1
+            elif prediction == 0 and truth == 1:
+                false_negatives += 1
+            elif prediction == 1 and truth == 0:
+                false_positives += 1
+            elif prediction == 1 and truth == 1:
+                true_positives += 1
+            else:
+                print 'Error'
+    total_predictions = true_negatives + false_negatives + false_positives + true_positives
+    accuracy = 1.0*(true_positives + true_negatives)/total_predictions
+    precision = 1.0*true_positives/(true_positives+false_positives)
+    recall = 1.0*true_positives/(true_positives+false_negatives)
+    f1 = 2.0 * true_positives/(2*true_positives + false_positives+false_negatives)
+    f2 = (1+2.0*2.0) * precision*recall/(4*precision + recall)
+    print clf_NB
+    print PERF_FORMAT_STRING.format(accuracy, precision, recall, f1, f2, display_precision = 5)
+    print RESULTS_FORMAT_STRING.format(total_predictions, true_positives, false_positives, false_negatives, true_negatives)
+    print ""      
+    return clf_NB
+'''
+def SVMAccuracyGrid(features, labels):
+    parameters = {'kernel':('rbf','sigmoid'),\
+    'C':[1,10,1e2,1e3, 1e4, 1e5, 1e6],\
+    'gamma': [0,0.0001,0.0005, 0.001, 0.005, 0.01, 0.1]} 
+    svm = SVC()
+    clf_SVM = GridSearchCV(svm, parameters)
+    t0 = time()         
+    clf_SVM.fit(features,labels)
     print "training time:", round(time()-t0, 3), "s"
+    print("Best estimator found by grid search:")
+    print clf_SVM.best_estimator_      
     t0 = time()
-    pred = clf.predict(features_test)
+    pred = clf_SVM.predict(features)
     print 'predicting time',round(time()-t0,3),'s'
-    accuracy = accuracy_score(labels_test,pred)
-    print 'Naive Bayes(Split) Accuracy:',accuracy_score(labels_test,pred)
-    print 'Naive Bayes(Split) Precision:',precision_score(labels_test,pred)
-    print 'Naive Bayes(Split) recall:',recall_score(labels_test,pred)
-    return clf   
+    accuracy = accuracy_score(labels,pred)
+    print 'SVM Accuracy:',accuracy_score(labels,pred)
+    print 'SVM Precision:',precision_score(labels,pred)
+    print 'SVM recall:',recall_score(labels,pred)
+    return clf_SVM
+'''
+SVC(C=1000.0, cache_size=200, class_weight='auto', coef0=0.0, degree=3,
+  gamma=0.005, kernel='rbf', max_iter=-1, probability=False,
+  random_state=None, shrinking=True, tol=0.001, verbose=False)
 
+    #print "training time:", round(time()-t0, 3), "s"
+    #t0 = time()
+    #print 'predicting time',round(time()-t0,3),'s'
+    #print 'Naive Bayes Accuracy:',accuracy_score(labels_test,pred)
+    #print 'Naive Bayes Precision:',precision_score(labels_test,pred)
+    #print 'Naive Bayes recall:',recall_score(labels_test,pred)
+    #print 'Naive Bayes f1_score:',f1_score(labels_test, pred)  
+'''
 ### Task 6: Dump your classifier, dataset, and features_list so anyone can
 ### check your results. You do not need to change anything below, but make sure
 ### that the version of poi_id.py that you submit can be run on its own and
 ### generates the necessary .pkl files for validating your results.
+PERF_FORMAT_STRING = "\
+\tAccuracy: {:>0.{display_precision}f}\tPrecision: {:>0.{display_precision}f}\t\
+Recall: {:>0.{display_precision}f}\tF1: {:>0.{display_precision}f}\tF2: {:>0.{display_precision}f}"
+RESULTS_FORMAT_STRING = "\tTotal predictions: {:4d}\tTrue positives: {:4d}\tFalse positives: {:4d}\tFalse negatives: {:4d}\tTrue negatives: {:4d}"
 
 def main(data_dict):
-    QueryDataSet(data_dict)
+    #QueryDataSet(data_dict)
     features_list=['poi','salary','exercised_stock_options','long_term_incentive','from_messages','fraction_to_poi']
-    #Convert dictinonary to numpy array.
+    #PlotReg(data_dict,'With Outlier(s)')
+    data_dict=RmOutliers(data_dict)
+    #PlotReg(data_dict,'Without Outlier(s)')
+    ##Convert dictinonary to numpy array.
     data = featureFormat(data_dict,features_list,sort_keys = True)
-    ### Extract features and labels from dataset for local testing
+    ## Extract features and labels from dataset for local testing
     labels, features = targetFeatureSplit(data)
     #Plot_3_Clustoids_BeforeScaling(labels,features)
     #Plot_3_Clustoids_AfterScaling(labels,features)
-    GNBAccuracy(features, labels)
-    features_train, features_test, labels_train, labels_test = \
-    train_test_split(features, labels, test_size=0.3, random_state=42)
-    clf=GNBAccuracySplit(features_train, labels_train, features_test, labels_test)    
-    dump_classifier_and_data(clf, data_dict, features_list)
-    
+    #DTAccuracy(features, labels)
+    #clf=SVMAccuracy(features, labels)
+    SVMAccuracyGrid(features, labels)
+    #features_train, features_test, labels_train, labels_test = \
+    #clf=GNBAccuracyKFold(features,labels)   
+    #dump_classifier_and_data(clf, data_dict, features_list)
+
 main(data_dict)

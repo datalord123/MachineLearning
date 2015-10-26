@@ -19,11 +19,14 @@ from sklearn import tree
 from sklearn.metrics import precision_score
 from sklearn.metrics import recall_score
 from sklearn.metrics import f1_score
+from sklearn.metrics import r2_score
 from time import time
-from sklearn.cross_validation import KFold
 from sklearn.grid_search import GridSearchCV
 from sklearn.cross_validation import StratifiedShuffleSplit
-
+import sklearn.neighbors as KN
+import sklearn.ensemble as ensem
+from sklearn.feature_selection import SelectPercentile,SelectKBest,f_classif
+from sklearn.pipeline import Pipeline
 def QueryDataSet(data_dict):
     print 'Total Number of Data Points:',len(data_dict)
     print 'Number POIs:',sum(1 for v in data_dict.values() if v['poi']==True)
@@ -74,12 +77,6 @@ def DrawClusters(pred, features, poi, Title,name="image.png", f1_name="feature 1
     plt.title(Title)
     plt.savefig(name)
     plt.show()
-
-def Plot_3_Clustoids_BeforeScaling(poi,finance_features):
-    clust = KMeans(n_clusters=3)
-    #print finance_features
-    pred = clust.fit_predict(finance_features)
-    DrawClusters(pred, finance_features, poi,'Clusters Before Scaling', name="clusters_before_scaling.pdf", f1_name='salary', f2_name='exercised_stock_options')
 
 def Plot_3_Clustoids_AfterScaling(poi,finance_features):
     scaler = MinMaxScaler()
@@ -132,18 +129,6 @@ def AddFeatures(data_dict):
 data_dict=AddFeatures(data_dict)
 keys = next(data_dict.itervalues()).keys()
 #print keys
-'''
-#Potential Features
-'salary', 'to_messages', 'deferral_payments', 'total_payments', 'exercised_stock_options', 
-'bonus', 'restricted_stock', 'shared_receipt_with_poi', 'restricted_stock_deferred', 
-'total_stock_value', 'expenses', 'loan_advances', 'from_messages', 'other', 
-'from_this_person_to_poi', 'poi', 'director_fees', 'deferred_income', 
-'long_term_incentive', 'email_address', 'from_poi_to_this_person',
-
-##Added
-fraction_from_poi,fraction_to_poi
-'''
-
 
 ### Task 4: Try a varity of classifiers
 ### Please name your classifier clf for easy export below.
@@ -154,54 +139,6 @@ fraction_from_poi,fraction_to_poi
 # Provided to give you a starting point. Try a variety of classifiers.
 #Decent Results
 
-def GNBAccuracy(features, labels):
-    ##Using smaller training data
-    #clf = SVC(kernel='linear')
-    clf_NB = GaussianNB()
-    t0 = time()
-    #kf=KFold(len(features))
-    clf_NB.fit(features,labels)
-    print "training time:", round(time()-t0, 3), "s"
-    t0 = time()
-    pred = clf_NB.predict(features)
-    print 'predicting time',round(time()-t0,3),'s'
-    accuracy = accuracy_score(labels,pred)
-    print 'Naive Bayes Accuracy:',accuracy_score(labels,pred)
-    print 'Naive Bayes Precision:',precision_score(labels,pred)
-    print 'Naive Bayes recall:',recall_score(labels,pred)
-    return clf_NB
-
-#Ovefits
-def SVMAccuracy(features, labels):
-    ##Using smaller training data
-    clf_SVM = SVC(kernel='rbf')
-    #clf = SVC(C=10000,kernel='rbf')
-    t0 = time()
-    clf_SVM.fit(features,labels)
-    print "training time:", round(time()-t0, 3), "s"
-    t0 = time()
-    pred = clf_SVM.predict(features)
-    print 'predicting time',round(time()-t0,3),'s'
-    accuracy = accuracy_score(labels,pred)
-    print 'SVM Accuracy:',accuracy_score(labels,pred)
-    print 'SVM Precision:',precision_score(labels,pred)
-    print 'SVM recall:',recall_score(labels,pred)
-    return clf_SVM
-#Overfits
-def DTAccuracy(features, labels):
-    clf_DT = tree.DecisionTreeClassifier(min_samples_split=2)
-    t0 = time()
-    clf_DT.fit(features,labels)
-    print "training time:", round(time()-t0, 3), "s"
-    t0 = time()
-    pred = clf_DT.predict(features)
-    print 'predicting time',round(time()-t0,3),'s'
-    accuracy = accuracy_score(labels,pred)
-    print 'DT Accuracy:',accuracy_score(labels,pred)
-    print 'DT Precision:',precision_score(labels,pred)
-    print 'DT recall:',recall_score(labels,pred)
-    return clf_DT
-
 #########################################################
 ### Task 5: Tune your classifier to achieve better than .3 precision and recall 
 ### using our testing script. Check the tester.py script in the final project
@@ -210,28 +147,49 @@ def DTAccuracy(features, labels):
 ### stratified shuffle split cross validation. For more info: 
 ### http://scikit-learn.org/stable/modules/generated/sklearn.cross_validation.StratifiedShuffleSplit.html
 '''
-def GNBAccuracyKFold(features, labels):
-    #parameters = {'kernel':('linear', 'rbf'), 'C':[1, 10]}             
+Support vectors are a very bad fit for this dataset, 
+because it is so sparse, distributed poorly, and highly imbalanced(email).
+
+When using an rbf kernel, the support vector classifier tries to find areas around which pois 
+are common, and areas around which pois are rare. Because the data is fairly spread out,
+ and because there are so few pois, on this data set the SVC will end up essentially 
+ building a small area around each poi, and then building enough areas to cover the 
+ non-pois elsewhere. 
+'''
+
+
+    #print fs.get_support()
+    #print 'All features:',feature_names
+    #print 'Scores of these features:',fs.scores_
+    #print '***Features sorted by score:', [feature_names[i] for i in np.argsort(fs.scores_)[::-1]]
+    #Plot_3_Clustoids_AfterScaling(labels,features)
+    #clf=GNBAccuracyShuffle(features, labels)
+    #dump_classifier_and_data(clf, data_dict, feature_names)
+
+
+def GNBAccuracyShuffle(features, labels,feature_names,folds = 1000):
     clf_NB = GaussianNB()
-    folds=10
-    cv = StratifiedShuffleSplit(labels, folds, random_state = 42)
+    #Ideal Value is percentil=5, after that all metrics start to Decrease.
+    #Have to use 10 though
+    fs=SelectPercentile(f_classif,percentile=10)
+    scaler = MinMaxScaler()
+    cv = StratifiedShuffleSplit(labels,folds, random_state = 42)
     true_negatives = 0
     false_negatives = 0
     true_positives = 0
     false_positives = 0
+    NB_pipeline=Pipeline([('Scale Features',scaler),('Select Features',fs),('GuassianNB',clf_NB)]) 
+    features= NB_pipeline.named_steps['Select Features'].fit_transform(features, labels)
+    feat_new= [feature_names[i]for i in NB_pipeline.named_steps['Select Features'].get_support(indices=True)]
+    print feat_new
     for train_indices, test_indices in cv:
-        ##The Features and Labels Values in the loop...What are they?
         features_train = [features[ii] for ii in train_indices]
         features_test = [features[ii] for ii in test_indices]
         labels_train = [labels[ii] for ii in train_indices]
         labels_test = [labels[ii] for ii in test_indices]
         t0 = time()
-        #### FOR SOME REASON SCLAING HAS NO IMPACT
-        scaler = MinMaxScaler()
-        features_train = scaler.fit_transform(features_train)            
-        features_test = scaler.fit_transform(features_test)
-        clf_NB.fit(features_train, labels_train)
-        pred = clf_NB.predict(features_test) 
+        NB_pipeline.fit(features_train, labels_train)
+        pred = NB_pipeline.predict(features_test)
         for prediction, truth in zip(pred, labels_test):
             if prediction == 0 and truth == 0:
                 true_negatives += 1
@@ -249,48 +207,78 @@ def GNBAccuracyKFold(features, labels):
     recall = 1.0*true_positives/(true_positives+false_negatives)
     f1 = 2.0 * true_positives/(2*true_positives + false_positives+false_negatives)
     f2 = (1+2.0*2.0) * precision*recall/(4*precision + recall)
-    print clf_NB
     print PERF_FORMAT_STRING.format(accuracy, precision, recall, f1, f2, display_precision = 5)
     print RESULTS_FORMAT_STRING.format(total_predictions, true_positives, false_positives, false_negatives, true_negatives)
-    print ""      
-    return clf_NB
-'''
-def SVMAccuracyGrid(features, labels):
-    parameters = {'kernel':('rbf','sigmoid'),\
-    'C':[1,10,1e2,1e3, 1e4, 1e5, 1e6],\
-    'gamma': [0,0.0001,0.0005, 0.001, 0.005, 0.01, 0.1]} 
-    svm = SVC()
-    clf_SVM = GridSearchCV(svm, parameters)
-    t0 = time()         
-    clf_SVM.fit(features,labels)
+    print ""
+    return NB_pipeline,feat_new
+
+def SVMAccuracyGridShuffle(features, labels,feature_names,folds = 100):    
+    fs=SelectKBest(f_classif, k=2)
+    clf_SCV = SVC(kernel='rbf')
+    #Cs=np.logspace(-2, 10, 13)
+    #gammas=np.logspace(-9, 3, 13)
+    scaler = MinMaxScaler()
+    cv = StratifiedShuffleSplit(labels,folds, random_state = 42)
+    pipe= Pipeline([('Scale_Features',scaler),('Select_Features',fs),('SVC',clf_SCV)]) 
+    #Where would PCA fit into this?
+    Klist=[]
+    val=0
+    for i in range(1,len(feature_names)):
+        Klist.append(i)
+    #Is this right?
+    #Throwing in all of the featurs returns a better result,but
+    #Will this always be the case? I would have thought that grid search
+    #would have chosen the right combination.
+    Cs=[1, 10, 100, 1000]
+    #So we want ot change Select features so that we can see which values have the highist 
+    #Scores
+    params = dict(\
+        SVC__C=Cs,\
+        SVC__gamma=[0,0.0001,0.0005, 0.001, 0.005, 0.01, 0.1])
+    #I Switched scoring to 'recall' and actually ended up with a WORSE value for that metric
+    #f1 DIDN'T Work        
+    clf_Grid_SVM = GridSearchCV(pipe,param_grid=params,cv=cv,scoring='accuracy')
+    t0=time()
+    clf_Grid_SVM.fit(features,labels)
+    pred=clf_Grid_SVM.predict(features)
     print "training time:", round(time()-t0, 3), "s"
     print("Best estimator found by grid search:")
-    print clf_SVM.best_estimator_      
+    print clf_Grid_SVM.best_estimator_
+    #Why is the optimal K ALL features? Will it be like this all the time?
+    KOpt= clf_Grid_SVM.best_params_['Select_Features__k']
+    fs2=SelectKBest(f_classif, k=KOpt)
+    fs2.fit_transform(features,labels)   
+    feat_new=[feature_names[i]for i in fs2.get_support(indices=True)]
+    print('Best Params found by grid search:')
+    print clf_Grid_SVM.best_params_
+    print('Best Score found by grid search:')
+    print clf_Grid_SVM.best_score_      
     t0 = time()
-    pred = clf_SVM.predict(features)
+    pred = clf_Grid_SVM.predict(features)
     print 'predicting time',round(time()-t0,3),'s'
     accuracy = accuracy_score(labels,pred)
     print 'SVM Accuracy:',accuracy_score(labels,pred)
     print 'SVM Precision:',precision_score(labels,pred)
     print 'SVM recall:',recall_score(labels,pred)
-    return clf_SVM
-'''
-SVC(C=1000.0, cache_size=200, class_weight='auto', coef0=0.0, degree=3,
-  gamma=0.005, kernel='rbf', max_iter=-1, probability=False,
-  random_state=None, shrinking=True, tol=0.001, verbose=False)
-
-    #print "training time:", round(time()-t0, 3), "s"
-    #t0 = time()
-    #print 'predicting time',round(time()-t0,3),'s'
-    #print 'Naive Bayes Accuracy:',accuracy_score(labels_test,pred)
-    #print 'Naive Bayes Precision:',precision_score(labels_test,pred)
-    #print 'Naive Bayes recall:',recall_score(labels_test,pred)
-    #print 'Naive Bayes f1_score:',f1_score(labels_test, pred)  
+    print 'SVM F1:',f1_score(labels,pred)
+    return clf_Grid_SVM,feat_new    
 '''
 ### Task 6: Dump your classifier, dataset, and features_list so anyone can
 ### check your results. You do not need to change anything below, but make sure
 ### that the version of poi_id.py that you submit can be run on its own and
 ### generates the necessary .pkl files for validating your results.
+'''
+'''
+#Potential Features
+'salary', 'to_messages', 'deferral_payments', 'total_payments', 'exercised_stock_options', 
+'bonus', 'restricted_stock', 'shared_receipt_with_poi', 'restricted_stock_deferred', 
+'total_stock_value', 'expenses', 'loan_advances', 'from_messages', 'other', 
+'from_this_person_to_poi', 'poi', 'director_fees', 'deferred_income', 
+'long_term_incentive', 'email_address', 'from_poi_to_this_person',
+##Added
+fraction_from_poi,fraction_to_poi
+'''
+
 PERF_FORMAT_STRING = "\
 \tAccuracy: {:>0.{display_precision}f}\tPrecision: {:>0.{display_precision}f}\t\
 Recall: {:>0.{display_precision}f}\tF1: {:>0.{display_precision}f}\tF2: {:>0.{display_precision}f}"
@@ -298,21 +286,33 @@ RESULTS_FORMAT_STRING = "\tTotal predictions: {:4d}\tTrue positives: {:4d}\tFals
 
 def main(data_dict):
     #QueryDataSet(data_dict)
-    features_list=['poi','salary','exercised_stock_options','long_term_incentive','from_messages','fraction_to_poi']
+    feature_names=['poi','salary','exercised_stock_options',\
+    'long_term_incentive','fraction_from_poi','fraction_to_poi',\
+    'expenses','deferred_income','director_fees','loan_advances',\
+    'total_stock_value','restricted_stock_deferred','restricted_stock',\
+    'bonus','total_payments','deferral_payments','to_messages','from_messages']
     #PlotReg(data_dict,'With Outlier(s)')
     data_dict=RmOutliers(data_dict)
     #PlotReg(data_dict,'Without Outlier(s)')
     ##Convert dictinonary to numpy array.
-    data = featureFormat(data_dict,features_list,sort_keys = True)
+    data = featureFormat(data_dict,feature_names,sort_keys = True)
     ## Extract features and labels from dataset for local testing
     labels, features = targetFeatureSplit(data)
-    #Plot_3_Clustoids_BeforeScaling(labels,features)
     #Plot_3_Clustoids_AfterScaling(labels,features)
-    #DTAccuracy(features, labels)
-    #clf=SVMAccuracy(features, labels)
-    SVMAccuracyGrid(features, labels)
-    #features_train, features_test, labels_train, labels_test = \
-    #clf=GNBAccuracyKFold(features,labels)   
-    #dump_classifier_and_data(clf, data_dict, features_list)
+    clf,my_features=SVMAccuracyGridShuffle(features, labels,feature_names)
+    #New I just added this
+    my_features.append('poi')
+    #clf,my_features=GNBAccuracyShuffle(features, labels,feature_names)
+    my_dataset={}
+    for k,v in data_dict.iteritems():
+        my_dataset[k]={}
+        for i in v:
+            if i in my_features:
+                my_dataset[k][i]=v[i]
+
+    #It looks like it's an issue with the classifier....
+    #We ren into the same issue regardless of it being the GNB classifier
+    #or the SVM gridsearchCV one. So something weird is up.
+    dump_classifier_and_data(clf, my_dataset, feature_names)
 
 main(data_dict)

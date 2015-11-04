@@ -6,20 +6,16 @@ from feature_format import featureFormat, targetFeatureSplit
 from tester import dump_classifier_and_data
 from collections import defaultdict
 import pandas as pd
+import numpy as np
 import matplotlib.pyplot as plt
 from sklearn import linear_model as lm
 from sklearn.cross_validation import train_test_split
 from sklearn.preprocessing import MinMaxScaler
 from sklearn.cluster import KMeans
-from sklearn.metrics import accuracy_score
-import numpy as np
+from sklearn.metrics import accuracy_score,precision_score,recall_score,f1_score,r2_score
 from sklearn.svm import SVC
 from sklearn.naive_bayes import GaussianNB
 from sklearn import tree
-from sklearn.metrics import precision_score
-from sklearn.metrics import recall_score
-from sklearn.metrics import f1_score
-from sklearn.metrics import r2_score
 from time import time
 from sklearn.grid_search import GridSearchCV
 from sklearn.cross_validation import StratifiedShuffleSplit
@@ -27,6 +23,29 @@ import sklearn.neighbors as KN
 import sklearn.ensemble as ensem
 from sklearn.feature_selection import SelectPercentile,SelectKBest,f_classif
 from sklearn.pipeline import Pipeline
+from sklearn.decomposition import PCA
+
+'''
+email features: ['to_messages', 'email_address', 'from_poi_to_this_person',\
+ 'from_messages', 'from_this_person_to_poi', 'poi', 'shared_receipt_with_poi']
+financial features: ['salary', 'deferral_payments', 'total_payments', 'loan_advances',\
+ 'bonus', 'restricted_stock_deferred', 'deferred_income', 'total_stock_value',\
+  'expenses', 'exercised_stock_options', 'other', 'long_term_incentive',\
+   'restricted_stock', 'director_fees']
+'''
+
+
+
+'''
+pca=PCA(n_components=2)
+pca.fit(data)
+return pca
+print pca.explained_variance_ratio_
+first_pc=pca.components_[0]
+second_pc=pca.components_[1]
+transfomred_data=pca.transform(data)
+'''
+
 def QueryDataSet(data_dict):
     print 'Total Number of Data Points:',len(data_dict)
     print 'Number POIs:',sum(1 for v in data_dict.values() if v['poi']==True)
@@ -213,54 +232,82 @@ def GNBAccuracyShuffle(features, labels,feature_names,folds = 1000):
     return NB_pipeline,feat_new
 
 def SVMAccuracyGridShuffle(features, labels,feature_names,folds = 100):    
-    fs=SelectKBest(f_classif, k=2)
-    clf_SCV = SVC(kernel='rbf')
+    KOpt= 2
+    fs=SelectKBest(f_classif, k=KOpt)
+    clf_SVC = SVC(kernel='rbf')
     #Cs=np.logspace(-2, 10, 13)
     #gammas=np.logspace(-9, 3, 13)
     scaler = MinMaxScaler()
     cv = StratifiedShuffleSplit(labels,folds, random_state = 42)
-    pipe= Pipeline([('Scale_Features',scaler),('Select_Features',fs),('SVC',clf_SCV)]) 
+    pipe= Pipeline([('Scale_Features',scaler),('Select_Features',fs),('SVC',clf_SVC)])
+    feature_names.remove('poi')
+    feat_new=[feature_names[i]for i in pipe.named_steps['Select_Features'].get_support(indices=True)]
+    
     #Where would PCA fit into this?
-    Klist=[]
-    val=0
-    for i in range(1,len(feature_names)):
-        Klist.append(i)
     #Is this right?
     #Throwing in all of the featurs returns a better result,but
     #Will this always be the case? I would have thought that grid search
     #would have chosen the right combination.
     Cs=[1, 10, 100, 1000]
-    #So we want ot change Select features so that we can see which values have the highist 
-    #Scores
+    Gammas=[0,0.0001,0.0005, 0.001, 0.005, 0.01, 0.1]
     params = dict(\
         SVC__C=Cs,\
-        SVC__gamma=[0,0.0001,0.0005, 0.001, 0.005, 0.01, 0.1])
+        SVC__gamma=Gammas)
     #I Switched scoring to 'recall' and actually ended up with a WORSE value for that metric
     #f1 DIDN'T Work        
-    clf_Grid_SVM = GridSearchCV(pipe,param_grid=params,cv=cv,scoring='accuracy')
-    t0=time()
-    clf_Grid_SVM.fit(features,labels)
-    pred=clf_Grid_SVM.predict(features)
+
+    true_negatives = 0
+    false_negatives = 0
+    true_positives = 0
+    false_positives = 0
+    for train_indices, test_indices in cv:
+        features_train = [features[ii] for ii in train_indices]
+        features_test = [features[ii] for ii in test_indices]
+        labels_train = [labels[ii] for ii in train_indices]
+        labels_test = [labels[ii] for ii in test_indices]         
+        #Is this right?
+        
+        #Does this go inside? or outside the loop??
+        clf_Grid_SVM = GridSearchCV(pipe,param_grid=params,cv=cv,scoring='accuracy')       
+        clf_Grid_SVM.fit(features_train, labels_train)                
+        predictions = clf_Grid_SVM.predict(features_test)
+        
+        for prediction, truth in zip(predictions, labels_test):
+            if prediction == 0 and truth == 0:
+                true_negatives += 1
+            elif prediction == 0 and truth == 1:
+                false_negatives += 1
+            elif prediction == 1 and truth == 0:
+                false_positives += 1
+            elif prediction == 1 and truth == 1:
+                true_positives += 1
+    total_predictions = true_negatives + false_negatives + false_positives + true_positives
+    accuracy = 1.0*(true_positives + true_negatives)/total_predictions
+    precision = 1.0*true_positives/(true_positives+false_positives)
+    recall = 1.0*true_positives/(true_positives+false_negatives)
+    f1 = 2.0 * true_positives/(2*true_positives + false_positives+false_negatives)
+    f2 = (1+2.0*2.0) * precision*recall/(4*precision + recall)
+    
+    print clf_Grid_SVM    
+    print PERF_FORMAT_STRING.format(accuracy, precision, recall, f1, f2, display_precision = 5)
+    print RESULTS_FORMAT_STRING.format(total_predictions, true_positives, false_positives, false_negatives, true_negatives)
+    ########Second half of the code
     print "training time:", round(time()-t0, 3), "s"
     print("Best estimator found by grid search:")
     print clf_Grid_SVM.best_estimator_
-    #Why is the optimal K ALL features? Will it be like this all the time?
-    KOpt= clf_Grid_SVM.best_params_['Select_Features__k']
-    fs2=SelectKBest(f_classif, k=KOpt)
-    fs2.fit_transform(features,labels)   
-    feat_new=[feature_names[i]for i in fs2.get_support(indices=True)]
     print('Best Params found by grid search:')
     print clf_Grid_SVM.best_params_
     print('Best Score found by grid search:')
     print clf_Grid_SVM.best_score_      
-    t0 = time()
-    pred = clf_Grid_SVM.predict(features)
-    print 'predicting time',round(time()-t0,3),'s'
-    accuracy = accuracy_score(labels,pred)
-    print 'SVM Accuracy:',accuracy_score(labels,pred)
-    print 'SVM Precision:',precision_score(labels,pred)
-    print 'SVM recall:',recall_score(labels,pred)
-    print 'SVM F1:',f1_score(labels,pred)
+    
+    #t0 = time()
+    #Fitting to full features, not Shuffle split, need to fix this.
+    #print 'predicting time',round(time()-t0,3),'s'
+    #accuracy = accuracy_score(labels,pred) 
+    #print 'SVM Accuracy:',accuracy_score(labels,pred)
+    #print 'SVM Precision:',precision_score(labels,pred)
+    #print 'SVM recall:',recall_score(labels,pred)
+    #print 'SVM F1:',f1_score(labels,pred)
     return clf_Grid_SVM,feat_new    
 '''
 ### Task 6: Dump your classifier, dataset, and features_list so anyone can
@@ -291,6 +338,9 @@ def main(data_dict):
     'expenses','deferred_income','director_fees','loan_advances',\
     'total_stock_value','restricted_stock_deferred','restricted_stock',\
     'bonus','total_payments','deferral_payments','to_messages','from_messages']
+    
+    #label being selected in KBest Code!!!!!!
+
     #PlotReg(data_dict,'With Outlier(s)')
     data_dict=RmOutliers(data_dict)
     #PlotReg(data_dict,'Without Outlier(s)')
@@ -301,7 +351,9 @@ def main(data_dict):
     #Plot_3_Clustoids_AfterScaling(labels,features)
     clf,my_features=SVMAccuracyGridShuffle(features, labels,feature_names)
     #New I just added this
-    my_features.append('poi')
+    print my_features
+    if 'poi' not in my_features:
+        my_features.append('poi')
     #clf,my_features=GNBAccuracyShuffle(features, labels,feature_names)
     my_dataset={}
     for k,v in data_dict.iteritems():

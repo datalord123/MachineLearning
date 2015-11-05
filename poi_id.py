@@ -239,66 +239,79 @@ def SVMAccuracyGridShuffle(features, labels,feature_names,folds = 100):
     #gammas=np.logspace(-9, 3, 13)
     scaler = MinMaxScaler()
     cv = StratifiedShuffleSplit(labels,folds, random_state = 42)
+    #print shape(cv)
+    #I think this is the issue, it is not accounting for reduced features
     pipe= Pipeline([('Scale_Features',scaler),('Select_Features',fs),('SVC',clf_SVC)])
     feature_names.remove('poi')
-    feat_new=[feature_names[i]for i in pipe.named_steps['Select_Features'].get_support(indices=True)]
-    
-    #Where would PCA fit into this?
-    #Is this right?
-    #Throwing in all of the featurs returns a better result,but
-    #Will this always be the case? I would have thought that grid search
-    #would have chosen the right combination.
     Cs=[1, 10, 100, 1000]
     Gammas=[0,0.0001,0.0005, 0.001, 0.005, 0.01, 0.1]
     params = dict(\
         SVC__C=Cs,\
         SVC__gamma=Gammas)
+    #Is this in the correct place?
     #I Switched scoring to 'recall' and actually ended up with a WORSE value for that metric
-    #f1 DIDN'T Work        
-
+    #/Users/matthewbellissimo/anaconda/lib/python2.7/site-packages/sklearn/metrics/classification.py:958: UndefinedMetricWarning: F-score is ill-defined and being set to 0.0 due to no predicted samples.
+    # 'precision', 'predicted', average, warn_for)
+    #scoring='f1'
     true_negatives = 0
     false_negatives = 0
     true_positives = 0
     false_positives = 0
+    #f1 DIDN'T Work  
     for train_indices, test_indices in cv:
+        #features_train = [features[ii] for ii in train_indices if ii<=KOpt]
+        #didn't help
         features_train = [features[ii] for ii in train_indices]
         features_test = [features[ii] for ii in test_indices]
         labels_train = [labels[ii] for ii in train_indices]
-        labels_test = [labels[ii] for ii in test_indices]         
-        #Is this right?
-        
+        labels_test = [labels[ii] for ii in test_indices]
+        #print len(features_train),len(labels_train)
+        clf_Grid_SVM = GridSearchCV(pipe,param_grid=params,cv=cv)
+        clf_Grid_SVM.fit(np.array(features_train), np.array(labels_train))    
+        #works when "clf_Grid_SVM" is replaced with pipe
+        #otherwise 'IndexError: list index out of range'
+        #???
+
+        #I think the issue is related to the fact that we split a part of the 
+        #data of into a test set, but it is expecting the whole thing.!!!
+
+        #That being said, how do you switch GridSearchCV to use stratified shuffle split
+        #instead of it's default k fold?!!!
+
+        #Is this right?   
         #Does this go inside? or outside the loop??
-        clf_Grid_SVM = GridSearchCV(pipe,param_grid=params,cv=cv,scoring='accuracy')       
-        clf_Grid_SVM.fit(features_train, labels_train)                
-        predictions = clf_Grid_SVM.predict(features_test)
-        
-        for prediction, truth in zip(predictions, labels_test):
-            if prediction == 0 and truth == 0:
-                true_negatives += 1
-            elif prediction == 0 and truth == 1:
-                false_negatives += 1
-            elif prediction == 1 and truth == 0:
-                false_positives += 1
-            elif prediction == 1 and truth == 1:
-                true_positives += 1
-    total_predictions = true_negatives + false_negatives + false_positives + true_positives
-    accuracy = 1.0*(true_positives + true_negatives)/total_predictions
-    precision = 1.0*true_positives/(true_positives+false_positives)
-    recall = 1.0*true_positives/(true_positives+false_negatives)
-    f1 = 2.0 * true_positives/(2*true_positives + false_positives+false_negatives)
-    f2 = (1+2.0*2.0) * precision*recall/(4*precision + recall)
+        #clf_Grid_SVM.fit(features_train, labels_train)
+        #feat_new=[feature_names[i]for i in pipe.named_steps['Select_Features'].get_support(indices=True)]
+
+        #Fit Transform?                
+        #predictions = clf_Grid_SVM.predict(features_test)
+    #    for prediction, truth in zip(predictions, labels_test):
+    #        if prediction == 0 and truth == 0:
+    #            true_negatives += 1
+    #        elif prediction == 0 and truth == 1:
+    #            false_negatives += 1
+    #        elif prediction == 1 and truth == 0:
+    #            false_positives += 1
+    #        elif prediction == 1 and truth == 1:
+    #            true_positives += 1
+    #total_predictions = true_negatives + false_negatives + false_positives + true_positives
+    #accuracy = 1.0*(true_positives + true_negatives)/total_predictions
+    #precision = 1.0*true_positives/(true_positives+false_positives)
+    #recall = 1.0*true_positives/(true_positives+false_negatives)
+    #f1 = 2.0 * true_positives/(2*true_positives + false_positives+false_negatives)
+    #f2 = (1+2.0*2.0) * precision*recall/(4*precision + recall)
     
-    print clf_Grid_SVM    
-    print PERF_FORMAT_STRING.format(accuracy, precision, recall, f1, f2, display_precision = 5)
-    print RESULTS_FORMAT_STRING.format(total_predictions, true_positives, false_positives, false_negatives, true_negatives)
+    #print clf_Grid_SVM    
+    #print PERF_FORMAT_STRING.format(accuracy, precision, recall, f1, f2, display_precision = 5)
+    #print RESULTS_FORMAT_STRING.format(total_predictions, true_positives, false_positives, false_negatives, true_negatives)
     ########Second half of the code
-    print "training time:", round(time()-t0, 3), "s"
-    print("Best estimator found by grid search:")
-    print clf_Grid_SVM.best_estimator_
-    print('Best Params found by grid search:')
-    print clf_Grid_SVM.best_params_
-    print('Best Score found by grid search:')
-    print clf_Grid_SVM.best_score_      
+    #print "training time:", round(time()-t0, 3), "s"
+    #print("Best estimator found by grid search:")
+    #print clf_Grid_SVM.best_estimator_
+    #print('Best Params found by grid search:')
+    #print clf_Grid_SVM.best_params_
+    #print('Best Score found by grid search:')
+    #print clf_Grid_SVM.best_score_      
     
     #t0 = time()
     #Fitting to full features, not Shuffle split, need to fix this.
@@ -308,7 +321,7 @@ def SVMAccuracyGridShuffle(features, labels,feature_names,folds = 100):
     #print 'SVM Precision:',precision_score(labels,pred)
     #print 'SVM recall:',recall_score(labels,pred)
     #print 'SVM F1:',f1_score(labels,pred)
-    return clf_Grid_SVM,feat_new    
+    #return clf_Grid_SVM,feat_new    
 '''
 ### Task 6: Dump your classifier, dataset, and features_list so anyone can
 ### check your results. You do not need to change anything below, but make sure
@@ -324,6 +337,12 @@ def SVMAccuracyGridShuffle(features, labels,feature_names,folds = 100):
 'long_term_incentive', 'email_address', 'from_poi_to_this_person',
 ##Added
 fraction_from_poi,fraction_to_poi
+
+####!!!! Perform a Correlation Matrix to see which features are correlated with each other
+http://pythonprogramming.net/pandas-statistics-correlation-tables-how-to/
+or look at using PCA to look at variances
+
+Ask about min max scaler vs log scaling.
 '''
 
 PERF_FORMAT_STRING = "\
@@ -339,8 +358,6 @@ def main(data_dict):
     'total_stock_value','restricted_stock_deferred','restricted_stock',\
     'bonus','total_payments','deferral_payments','to_messages','from_messages']
     
-    #label being selected in KBest Code!!!!!!
-
     #PlotReg(data_dict,'With Outlier(s)')
     data_dict=RmOutliers(data_dict)
     #PlotReg(data_dict,'Without Outlier(s)')
@@ -349,22 +366,26 @@ def main(data_dict):
     ## Extract features and labels from dataset for local testing
     labels, features = targetFeatureSplit(data)
     #Plot_3_Clustoids_AfterScaling(labels,features)
-    clf,my_features=SVMAccuracyGridShuffle(features, labels,feature_names)
+    SVMAccuracyGridShuffle(features, labels,feature_names)
+    #clf,my_features=SVMAccuracyGridShuffle(features, labels,feature_names)
+    #Above I am returning a fitted(GridSearch) Classifier. For submission,
+    #should i just be returning the type of classifer? ex: SVM? 
+
     #New I just added this
-    print my_features
-    if 'poi' not in my_features:
-        my_features.append('poi')
+    #print my_features
+    #if 'poi' not in my_features:
+    #    my_features.append('poi')
     #clf,my_features=GNBAccuracyShuffle(features, labels,feature_names)
-    my_dataset={}
-    for k,v in data_dict.iteritems():
-        my_dataset[k]={}
-        for i in v:
-            if i in my_features:
-                my_dataset[k][i]=v[i]
+    #my_dataset={}
+    #for k,v in data_dict.iteritems():
+    #    my_dataset[k]={}
+    #    for i in v:
+    #        if i in my_features:
+    #            my_dataset[k][i]=v[i]
 
     #It looks like it's an issue with the classifier....
     #We ren into the same issue regardless of it being the GNB classifier
     #or the SVM gridsearchCV one. So something weird is up.
-    dump_classifier_and_data(clf, my_dataset, feature_names)
+    #dump_classifier_and_data(clf, my_dataset, feature_names)
 
 main(data_dict)

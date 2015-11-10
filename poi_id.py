@@ -196,7 +196,6 @@ def DTShuffleWPCA(features_train, labels_train, features_test, labels_test,featu
     clf_Grid.fit(features_train, labels_train)
     t0=time()
 
-
     #How do i deal with the testing features now? wouldn't that have  different PCA then?    
     print "training time:", round(time()-t0, 3), "s"
     prediction=clf_Grid.predict(features_test)
@@ -313,7 +312,7 @@ def main():
     data_dict = pickle.load(open("final_project_dataset.pkl", "r"))
     data_dict=AddFeatures(data_dict)
     #Removed features, with extremly high numbers of missing values,and\or
-    #are highly correlated with another feature.
+    #are highly correlated with another feature.<--IS THIS A CORRECT STRATEGY?
     exclude=['loan_advances','director_fees','restricted_stock_deferred',\
     'deferral_payments','deferred_income','email_address',\
     'exercised_stock_options','restricted_stock','other']
@@ -332,7 +331,7 @@ def main():
     #Why is features_train in the top funciton a list, and the bottom function
     # a numpy array.
     #DTShuffle(features_train, labels_train, features_test, labels_test,feature_names) 
-    DTShuffleWPCA(features_train, labels_train, features_test, labels_test,feature_names) 
+    clf=DTShuffleWPCA(features_train, labels_train, features_test, labels_test,feature_names) 
     #QueryDataSet(data_dict)
     #PlotReg(data_dict,'With Outlier(s)')
     #PlotReg(data_dict,'Without Outlier(s)')
@@ -355,7 +354,7 @@ def main():
     #            my_dataset[k][i]=v[i]
     #feature_names.insert(0,'poi')
     #print feature_names
-    #dump_classifier_and_data(clf, my_dataset, feature_names)
+    dump_classifier_and_data(clf, data_dict, feature_names)
 
 
     #test_classifier(clf, my_dataset, feature_names)

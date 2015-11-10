@@ -23,18 +23,8 @@ import sklearn.neighbors as KN
 import sklearn.ensemble as ensem
 from sklearn.feature_selection import SelectPercentile,SelectKBest,f_classif
 from sklearn.pipeline import Pipeline
-from sklearn.decomposition import PCA
-
-'''
-email features: ['to_messages', 'email_address', 'from_poi_to_this_person',\
- 'from_messages', 'from_this_person_to_poi', 'poi', 'shared_receipt_with_poi']
-financial features: ['salary', 'deferral_payments', 'total_payments', 'loan_advances',\
- 'bonus', 'restricted_stock_deferred', 'deferred_income', 'total_stock_value',\
-  'expenses', 'exercised_stock_options', 'other', 'long_term_incentive',\
-   'restricted_stock', 'director_fees']
-'''
-
-
+from sklearn import decomposition,preprocessing
+from tester import test_classifier
 
 '''
 pca=PCA(n_components=2)
@@ -51,7 +41,7 @@ def QueryDataSet(data_dict):
     print 'Number POIs:',sum(1 for v in data_dict.values() if v['poi']==True)
     print 'Number non-POIs:',sum(1 for v in data_dict.values() if v['poi']==False)
     keys = next(data_dict.itervalues()).keys()
-    print 'Number of Features:', len(keys)
+    print 'Number of Features:', len(keys) 
     FeatWNaN=dict.fromkeys(keys,0)
     FeatWNaNPOI=dict.fromkeys(keys,0)
 	#Count the number of Missing values
@@ -67,6 +57,12 @@ def QueryDataSet(data_dict):
     dfPOI = dfPOI.rename(columns = {0: 'Missing Vals POI'})
     df=df.join(dfPOI)    
     print df.sort('Missing Vals',ascending=0)
+
+def ShowCorrel(data_dict):
+    dfCor= pd.DataFrame.from_dict(data_dict,orient='index')
+    dfCor.replace('NaN',np.NaN,inplace=True)
+    dfCor.dropna(axis=0,how='any',inplace=True)
+    print dfCor.corr()
 
 def PlotData(target,features,Title):
     data_color = "b"
@@ -97,7 +93,7 @@ def DrawClusters(pred, features, poi, Title,name="image.png", f1_name="feature 1
     plt.savefig(name)
     plt.show()
 
-def Plot_3_Clustoids_AfterScaling(poi,finance_features):
+def Plot_n_Clustoids_AfterScaling(poi,finance_features):
     scaler = MinMaxScaler()
     rescaled_features = scaler.fit_transform(finance_features)
     clust = KMeans(n_clusters=3)
@@ -107,7 +103,6 @@ def Plot_3_Clustoids_AfterScaling(poi,finance_features):
 
 ### Load the dictionary containing the dataset
 ### Task 1: Select what features you'll use.
-data_dict = pickle.load(open("final_project_dataset.pkl", "r"))
 ### Task 2: Remove outliers
 def PlotReg(data_dict,Title):
     RegFeatures = ["salary", "bonus"]
@@ -120,7 +115,6 @@ def RmOutliers(data_dict):
     return data_dict    
 
 ### Task 3: Create new feature(s)
-
 def computeFraction( poi_messages, all_messages ):
     if poi_messages=='NaN' or all_messages == 'NaN':
         fraction = 0
@@ -129,7 +123,6 @@ def computeFraction( poi_messages, all_messages ):
         all_messages=float(all_messages)
         fraction = poi_messages/all_messages
     return fraction
-
 
 def AddFeatures(data_dict):
     for name in data_dict:       
@@ -145,9 +138,6 @@ def AddFeatures(data_dict):
 
 ### features_list is a list of strings, each of which is a feature name.
 ### The first feature must be "poi".
-data_dict=AddFeatures(data_dict)
-keys = next(data_dict.itervalues()).keys()
-#print keys
 
 ### Task 4: Try a varity of classifiers
 ### Please name your classifier clf for easy export below.
@@ -175,8 +165,6 @@ are common, and areas around which pois are rare. Because the data is fairly spr
  building a small area around each poi, and then building enough areas to cover the 
  non-pois elsewhere. 
 '''
-
-
     #print fs.get_support()
     #print 'All features:',feature_names
     #print 'Scores of these features:',fs.scores_
@@ -185,82 +173,92 @@ are common, and areas around which pois are rare. Because the data is fairly spr
     #clf=GNBAccuracyShuffle(features, labels)
     #dump_classifier_and_data(clf, data_dict, feature_names)
 
-'''
-def GNBAccuracyShuffle(features, labels,feature_names,folds = 1000):
-    clf_NB = GaussianNB()
-    #Ideal Value is percentil=5, after that all metrics start to Decrease.
-    #Have to use 10 though
-    fs=SelectPercentile(f_classif,percentile=10)
-    scaler = MinMaxScaler()
-    cv = StratifiedShuffleSplit(labels,folds, random_state = 42)
-    true_negatives = 0
-    false_negatives = 0
-    true_positives = 0
-    false_positives = 0
-    NB_pipeline=Pipeline([('Scale Features',scaler),('Select Features',fs),('GuassianNB',clf_NB)]) 
-    features= NB_pipeline.named_steps['Select Features'].fit_transform(features, labels)
-    feat_new= [feature_names[i]for i in NB_pipeline.named_steps['Select Features'].get_support(indices=True)]
-    print feat_new
-    for train_indices, test_indices in cv:
-        features_train = [features[ii] for ii in train_indices]
-        features_test = [features[ii] for ii in test_indices]
-        labels_train = [labels[ii] for ii in train_indices]
-        labels_test = [labels[ii] for ii in test_indices]
-        t0 = time()
-        NB_pipeline.fit(features_train, labels_train)
-        pred = NB_pipeline.predict(features_test)
-        for prediction, truth in zip(pred, labels_test):
-            if prediction == 0 and truth == 0:
-                true_negatives += 1
-            elif prediction == 0 and truth == 1:
-                false_negatives += 1
-            elif prediction == 1 and truth == 0:
-                false_positives += 1
-            elif prediction == 1 and truth == 1:
-                true_positives += 1
-            else:
-                print 'Error'
-    total_predictions = true_negatives + false_negatives + false_positives + true_positives
-    accuracy = 1.0*(true_positives + true_negatives)/total_predictions
-    precision = 1.0*true_positives/(true_positives+false_positives)
-    recall = 1.0*true_positives/(true_positives+false_negatives)
-    f1 = 2.0 * true_positives/(2*true_positives + false_positives+false_negatives)
-    f2 = (1+2.0*2.0) * precision*recall/(4*precision + recall)
-    print PERF_FORMAT_STRING.format(accuracy, precision, recall, f1, f2, display_precision = 5)
-    print RESULTS_FORMAT_STRING.format(total_predictions, true_positives, false_positives, false_negatives, true_negatives)
-    print ""
-    return NB_pipeline,feat_new
-'''
-def KClusterShuffle(features_train, labels_train, features_test, labels_test,feature_names,folds = 100):    
-    KOpt= 2
-    CInit=3
+def DTShuffleWPCA(features_train, labels_train, features_test, labels_test,feature_names,folds = 100):    
+    KOpt=5
     fs=SelectKBest(f_classif, k=KOpt)
-    clf_SVC = SVC(kernel='rbf')
-    cluster = KMeans(n_clusters=CInit)
+    clf = tree.DecisionTreeClassifier(min_samples_split=2)
     scaler = MinMaxScaler()
     cv = StratifiedShuffleSplit(labels_train,folds, random_state = 42)
-    pipe= Pipeline([('Scale_Features',scaler),('Select_Features',fs),('Cluster',cluster)])
+    pca=decomposition.PCA(n_components=KOpt)   
+    #How do i replace this in the pipeline!!!
+    #scaled_data = preprocessing.scale(features_train)
+    #I just applied PCA to the pipeline and it was a clusterfuck.
+    #all of my metrics are bad now, I'm wondering if it's a scaling issue, but 
+    #How could that be, is "PreProcessing Scaling" different from "MinMaxScaler"
+    #pipe= Pipeline([('Scale_Features',scaler),('PCA',pca),('Select_Features',fs),('Classifier',cluster)])
+    pipe= Pipeline([('Scale_Features',scaler),('PCA',pca),('Classifier',clf)])
     feature_names.remove('poi')
-    ClusTest=[2,3,4,5,6]
+    Test=[1,5,10,15,20,25]
     params = dict(\
-        Cluster__n_clusters=ClusTest)
-    clf_Grid_SVM = GridSearchCV(pipe,param_grid=params,cv=cv,scoring='f1')
+        Classifier__min_samples_split=Test)
+    clf_Grid = GridSearchCV(pipe,param_grid=params,cv=cv,scoring='f1_weighted')
+    clf_Grid.fit(features_train, labels_train)
     t0=time()
-    clf_Grid_SVM.fit(np.array(features_train), np.array(labels_train))
-    print "training time:", round(time()-t0, 3), "s"  
-    prediction=clf_Grid_SVM.predict(features_test)
+
+
+    #How do i deal with the testing features now? wouldn't that have  different PCA then?    
+    print "training time:", round(time()-t0, 3), "s"
+    prediction=clf_Grid.predict(features_test)
     print("Best estimator found by grid search:")
-    print clf_Grid_SVM.best_estimator_
+    print clf_Grid.best_estimator_
     print('Best Params found by grid search:')
-    print clf_Grid_SVM.best_params_
+    print clf_Grid.best_params_
     print('Best Score found by grid search:')  
-    print clf_Grid_SVM.best_score_      
+    print clf_Grid.best_score_      
     print 'Accuracy:',accuracy_score(labels_test,prediction)    
     print 'Precision:',precision_score(labels_test,prediction)    
     print 'Recall:',recall_score(labels_test,prediction)    
-    print 'F1 Score:',f1_score(labels_test,prediction)    
-    #feat_new=[feature_names[i]for i in pipe.named_steps['Select_Features'].get_support(indices=True)]
+    print 'F1 Score:',f1_score(labels_test,prediction)
+    pipe.fit_transform(features_train,labels_train)
+    #return clf_Grid, my_features
+    return clf_Grid
 
+#ASK about why precision goes to 0 when I include 1 in ClusTest, why does gridsearch go after 
+#essentially it's own scoring metric, even though it's been assigned a weighted F1, the less clusters
+#the higher it seems to go, but the expense of essentially all the remaining metrics(precision,recall,f1,etc)
+
+#ASK about why the result sets are so random. They're all over the place.
+#ASk about how to include PCA
+#Ask about the error on top.
+
+#K means is the wrong algorithm to use.
+#Accuracy Scores are all over the place still
+#Classifier__min_samples_split also keep selectin random values.
+def DTShuffle(features_train, labels_train, features_test, labels_test,feature_names,folds = 100):    
+    KOpt=5
+    fs=SelectKBest(f_classif, k=KOpt)
+    clf = tree.DecisionTreeClassifier(min_samples_split=2)
+    scaler = MinMaxScaler()
+    cv = StratifiedShuffleSplit(labels_train,folds, random_state = 42)
+    #pipe= Pipeline([('Scale_Features',scaler),('Select_Features',fs),('Classifier',clf)])
+    pipe= Pipeline([('Scale_Features',scaler),('Classifier',clf)])
+    Test=[1,5,10,15,20,25]
+    params = dict(\
+        Classifier__min_samples_split=Test)
+    clf_Grid = GridSearchCV(pipe,param_grid=params,cv=cv,scoring='f1_weighted')
+    clf_Grid.fit(features_train, labels_train)
+    t0=time()
+    print "training time:", round(time()-t0, 3), "s"
+    prediction=clf_Grid.predict(features_test)
+    print("Best estimator found by grid search:")
+    print clf_Grid.best_estimator_
+    print('Best Params found by grid search:')
+    print clf_Grid.best_params_
+    print('Best Score found by grid search:')  
+    print clf_Grid.best_score_      
+    print 'Accuracy:',accuracy_score(labels_test,prediction)    
+    print 'Precision:',precision_score(labels_test,prediction)    
+    print 'Recall:',recall_score(labels_test,prediction)    
+    print 'F1 Score:',f1_score(labels_test,prediction)
+    pipe.fit_transform(features_train,labels_train)
+    feature_names.remove('poi')
+    #my_features=[feature_names[i]for i in pipe.named_steps['Select_Features'].get_support(indices=True)]
+    #return clf_Grid, my_features
+    return clf_Grid
+
+    #Is there something else I could do, this is making my scores worse for some reason
+    #pipe.fit(features_train,labels_train)    
+    #print feat_new
 
 '''
 ### Task 6: Dump your classifier, dataset, and features_list so anyone can
@@ -281,40 +279,60 @@ fraction_from_poi,fraction_to_poi
 ####!!!! Perform a Correlation Matrix to see which features are correlated with each other
 http://pythonprogramming.net/pandas-statistics-correlation-tables-how-to/
 or look at using PCA to look at variances
-
-Ask about min max scaler vs log scaling.
-
-
-PERF_FORMAT_STRING = "\
-\tAccuracy: {:>0.{display_precision}f}\tPrecision: {:>0.{display_precision}f}\t\
-Recall: {:>0.{display_precision}f}\tF1: {:>0.{display_precision}f}\tF2: {:>0.{display_precision}f}"
-RESULTS_FORMAT_STRING = "\tTotal predictions: {:4d}\tTrue positives: {:4d}\tFalse positives: {:4d}\tFalse negatives: {:4d}\tTrue negatives: {:4d}"
 '''
-def main(data_dict):
-    #QueryDataSet(data_dict)
-    feature_names=['poi','salary','exercised_stock_options',\
-    'long_term_incentive','fraction_from_poi','fraction_to_poi',\
-    'expenses','deferred_income','director_fees','loan_advances',\
-    'total_stock_value','restricted_stock_deferred','restricted_stock',\
-    'bonus','total_payments','deferral_payments','to_messages','from_messages']
-    
-    #PlotReg(data_dict,'With Outlier(s)')
-    data_dict=RmOutliers(data_dict)
-    #PlotReg(data_dict,'Without Outlier(s)')
-    ##Convert dictinonary to numpy array.
-    data = featureFormat(data_dict,feature_names,sort_keys = True)
-    ## Extract features and labels from dataset for local testing
-    labels, features = targetFeatureSplit(data)
+
+def ExcludeFeatures(data_dict,exclude):
+    #everything has a NaN have to remove the really high NaN elements.
+    #Dropped columns with a large number of missing values so that I could filter out
+    #missing records and Perform PCA/Correlation analysis.
+
+    #Only seeing 31 records, see if any of the high missing values features kept in 
+    #are correlated with features with lower number of missing values.    
+    for k,v in data_dict.items():
+        for i in v.keys():
+            if i in exclude:
+                del data_dict[k][i]
+
+    feature_names = next(data_dict.itervalues()).keys()
+    feature_names.insert(0, feature_names.pop(feature_names.index('poi')))
+    return data_dict,feature_names
+
+def SplitTestData(features,labels):    
     cv = StratifiedShuffleSplit(labels,n_iter=1, test_size=.2)
     for train_indices, test_indices in cv:
         features_train = [features[ii] for ii in train_indices]
         features_test = [features[ii] for ii in test_indices]
         labels_train = [labels[ii] for ii in train_indices]
-        labels_test = [labels[ii] for ii in test_indices] 
-    
-    KClusterShuffle(features_train, labels_train, features_test, labels_test,feature_names)
+        labels_test = [labels[ii] for ii in test_indices]
+    return features_train,features_test,labels_train,labels_test
 
-    #Plot_3_Clustoids_AfterScaling(labels,features)
+
+def main():
+    data_dict = pickle.load(open("final_project_dataset.pkl", "r"))
+    data_dict=AddFeatures(data_dict)
+    #Removed features, with extremly high numbers of missing values,and\or
+    #are highly correlated with another feature.
+    exclude=['loan_advances','director_fees','restricted_stock_deferred',\
+    'deferral_payments','deferred_income','email_address',\
+    'exercised_stock_options','restricted_stock','other']
+    #High Corr:'exercised_stock_options','restricted_stock_deferred',restricted_stock,'other'
+    data_dict,feature_names=ExcludeFeatures(data_dict,exclude)
+    #ShowCorrel(data_dict)
+    #Next do something similar showing EDA, names of items linked together.
+    #Ex:Exclude Total_Stock_value and Excercised stock options, should one be excluded?
+    data = featureFormat(data_dict,feature_names,sort_keys = True)
+    ## Extract features and labels from dataset for local testing
+    labels, features = targetFeatureSplit(data)
+    features_train,features_test,labels_train,labels_test= SplitTestData(features,labels)
+    #Why is features_train in the top funciton a list, and the bottom function
+    # a numpy array.
+    #DTShuffle(features_train, labels_train, features_test, labels_test,feature_names) 
+    DTShuffleWPCA(features_train, labels_train, features_test, labels_test,feature_names) 
+    #QueryDataSet(data_dict)
+    #PlotReg(data_dict,'With Outlier(s)')
+    #PlotReg(data_dict,'Without Outlier(s)')
+    ##Convert dictinonary to numpy array.
+    #Plot_n_Clustoids_AfterScaling(labels,features)
     #SVMAccuracyGridShuffle(features, labels,feature_names)
     #clf,my_features=SVMAccuracyGridShuffle(features, labels,feature_names)
     #Above I am returning a fitted(GridSearch) Classifier. For submission,
@@ -324,17 +342,20 @@ def main(data_dict):
     #print my_features
     #if 'poi' not in my_features:
     #    my_features.append('poi')
-    #clf,my_features=GNBAccuracyShuffle(features, labels,feature_names)
     #my_dataset={}
     #for k,v in data_dict.iteritems():
     #    my_dataset[k]={}
     #    for i in v:
     #        if i in my_features:
     #            my_dataset[k][i]=v[i]
+    #feature_names.insert(0,'poi')
+    #print feature_names
+    #dump_classifier_and_data(clf, my_dataset, feature_names)
 
+
+    #test_classifier(clf, my_dataset, feature_names)
     #It looks like it's an issue with the classifier....
     #We ren into the same issue regardless of it being the GNB classifier
     #or the SVM gridsearchCV one. So something weird is up.
-    #dump_classifier_and_data(clf, my_dataset, feature_names)
 
-main(data_dict)
+main()

@@ -173,6 +173,7 @@ are common, and areas around which pois are rare. Because the data is fairly spr
     #clf=GNBAccuracyShuffle(features, labels)
     #dump_classifier_and_data(clf, data_dict, feature_names)
 
+#Maybe Try KNN after this.
 def DTShuffleWPCA(features_train, labels_train, features_test, labels_test,feature_names,folds = 100):    
     KOpt=5
     fs=SelectKBest(f_classif, k=KOpt)
@@ -224,6 +225,7 @@ def DTShuffleWPCA(features_train, labels_train, features_test, labels_test,featu
 #K means is the wrong algorithm to use.
 #Accuracy Scores are all over the place still
 #Classifier__min_samples_split also keep selectin random values.
+'''
 def DTShuffle(features_train, labels_train, features_test, labels_test,feature_names,folds = 100):    
     KOpt=5
     fs=SelectKBest(f_classif, k=KOpt)
@@ -255,7 +257,7 @@ def DTShuffle(features_train, labels_train, features_test, labels_test,feature_n
     #my_features=[feature_names[i]for i in pipe.named_steps['Select_Features'].get_support(indices=True)]
     #return clf_Grid, my_features
     return clf_Grid
-
+'''
     #Is there something else I could do, this is making my scores worse for some reason
     #pipe.fit(features_train,labels_train)    
     #print feat_new
@@ -323,6 +325,9 @@ def main():
     data = featureFormat(data_dict,feature_names,sort_keys = True)
     ## Extract features and labels from dataset for local testing
     labels, features = targetFeatureSplit(data)
+
+    #is this in the wrong spot(does PCA screw this up?)
+    #I tried doing PCA first but piping in the features after gave me a shape error
     features_train,features_test,labels_train,labels_test= SplitTestData(features,labels)
     #Why is features_train in the top funciton a list, and the bottom function
     # a numpy array.

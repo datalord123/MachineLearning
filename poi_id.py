@@ -60,11 +60,6 @@ def QueryDataSet(data_dict):
     df=df.join(dfPOI)    
     print df.sort('Missing Vals',ascending=0)
 
-def ShowCorrel(data_dict):
-    dfCor= pd.DataFrame.from_dict(data_dict,orient='index')
-    dfCor.replace('NaN',np.NaN,inplace=True)
-    dfCor.dropna(axis=0,how='any',inplace=True)
-    print dfCor.corr()
 
 def PlotData(target,features,Title):
     data_color = "b"
@@ -138,6 +133,13 @@ def AddFeatures(data_dict):
         data_dict[name]["fraction_to_poi"] = fraction_to_poi
     return data_dict
 
+def ShowCorrel(data_dict):
+    dfCor= pd.DataFrame.from_dict(data_dict,orient='index')
+    dfCor.replace('NaN',np.NaN,inplace=True)
+    #dfCor.dropna(axis=0,how='any',inplace=True)
+    #print dfCor
+
+    print dfCor.corr()
 ### features_list is a list of strings, each of which is a feature name.
 ### The first feature must be "poi".
 
@@ -191,12 +193,12 @@ def TuneDT(features, labels,features_list,folds = 100):
     print('Best Params found by grid search: \n')
     print clf_Grid.best_params_
     my_features=[features_list[i]for i in PipeOpt.named_steps['Select_Features'].get_support(indices=True)]
-    print 'Original Features List:',features_list
+    print 'Original Features List:\n',features_list
     print 'Features sorted by score(Biggest to Smallest):\n', [features_list[i] for i in np.argsort(PipeOpt.named_steps['Select_Features'].scores_)[::-1]]
     print 'Features Scores:\n',PipeOpt.named_steps['Select_Features'].scores_[::-1]
     print 'Features Scores 2:\n',np.argsort(PipeOpt.named_steps['Select_Features'].scores_)[::-1]
     print 'Selected Features: \n',my_features
-    print 'Feature Importances:',PipeOpt.named_steps['Classifier'].feature_importances_
+    print 'Feature Importances:\n',PipeOpt.named_steps['Classifier'].feature_importances_
     return PipeOpt
 
 '''
@@ -226,22 +228,24 @@ def main():
     #are highly correlated with another feature.<--IS THIS A CORRECT STRATEGY?
     exclude=['loan_advances','director_fees','restricted_stock_deferred',\
     'deferral_payments','deferred_income',\
-    'exercised_stock_options','restricted_stock','other','email_address']
+    'exercised_stock_options','restricted_stock','other','email_address',\
+    'long_term_incentive']
     #High Corr:'exercised_stock_options','restricted_stock_deferred',restricted_stock,'other'
     #Feature Importance Corr:'shared_receipt_with_poi','from_poi_to_this_person'
-    #ShowCorrel(data_dict)
+    ShowCorrel(my_dataset)
     #Ex:Exclude Total_Stock_value and Excercised stock options, should one be excluded?
-    features_list= next(data_dict.itervalues()).keys()
-    for i in exclude:
-        features_list.remove(i)
-    features_list.insert(0, features_list.pop(features_list.index('poi')))
-    data = featureFormat(data_dict,features_list,sort_keys = True)
-    ## Extract features and labels from dataset for local testing
-    labels,features = targetFeatureSplit(data)
-    features_train,features_test,labels_train,labels_test= train_test_split(features,labels,\
-        test_size=.1,random_state=42,stratify=labels)    
-    clf=TuneDT(features,labels,features_list)
-    features_list.insert(0, 'poi')
-    dump_classifier_and_data(clf, my_dataset, features_list)
-    test_classifier(clf, my_dataset, features_list)
+    
+    #features_list= next(my_dataset.itervalues()).keys()
+    #for i in exclude:
+    #    features_list.remove(i)
+    #features_list.insert(0, features_list.pop(features_list.index('poi')))
+    #data = featureFormat(my_dataset,features_list,sort_keys = True)
+    ### Extract features and labels from dataset for local testing
+    #labels,features = targetFeatureSplit(data)
+    #features_train,features_test,labels_train,labels_test= train_test_split(features,labels,\
+    #    test_size=.1,random_state=42,stratify=labels)    
+    #clf=TuneDT(features,labels,features_list)
+    #features_list.insert(0, 'poi')
+    #dump_classifier_and_data(clf, my_dataset, features_list)
+    #test_classifier(clf, my_dataset, features_list)
 main()

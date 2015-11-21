@@ -38,16 +38,16 @@ second_pc=pca.components_[1]
 transfomred_data=pca.transform(data)
 '''
 
-def QueryDataSet(data_dict):
-    print 'Total Number of Data Points:',len(data_dict)
-    print 'Number POIs:',sum(1 for v in data_dict.values() if v['poi']==True)
-    print 'Number non-POIs:',sum(1 for v in data_dict.values() if v['poi']==False)
-    keys = next(data_dict.itervalues()).keys()
+def QueryDataSet(my_dataset):
+    print 'Total Number of Data Points:',len(my_dataset)
+    print 'Number POIs:',sum(1 for v in my_dataset.values() if v['poi']==True)
+    print 'Number non-POIs:',sum(1 for v in my_dataset.values() if v['poi']==False)
+    keys = next(my_dataset.itervalues()).keys()
     print 'Number of Features:', len(keys) 
     FeatWNaN=dict.fromkeys(keys,0)
     FeatWNaNPOI=dict.fromkeys(keys,0)
 	#Count the number of Missing values
-    for k,v in data_dict.iteritems():
+    for k,v in my_dataset.iteritems():
         for i in v:
             if v[i] == 'NaN':
                 FeatWNaN[i]+=1
@@ -121,24 +121,32 @@ def computeFraction( poi_messages, all_messages ):
         fraction = poi_messages/all_messages
     return fraction
 
-def AddFeatures(data_dict):
-    for name in data_dict:       
-        from_poi_to_this_person = data_dict[name]['from_poi_to_this_person']
-        to_messages = data_dict[name]['to_messages']
-        fraction_from_poi = computeFraction( from_poi_to_this_person, to_messages)
-        data_dict[name]["fraction_from_poi"]=fraction_from_poi
-        from_this_person_to_poi = data_dict[name]['from_this_person_to_poi']
-        from_messages = data_dict[name]["from_messages"]
-        fraction_to_poi = computeFraction( from_this_person_to_poi, from_messages )
-        data_dict[name]["fraction_to_poi"] = fraction_to_poi
-    return data_dict
+#'from_poi_to_this_person'
+#'to_messages'
 
-def ShowCorrel(data_dict):
-    dfCor= pd.DataFrame.from_dict(data_dict,orient='index')
+#'from_this_person_to_poi'
+#"from_messages"
+
+
+def AddFeatures(my_dataset):
+    for name in my_dataset:       
+        from_poi_to_this_person = my_dataset[name]['from_poi_to_this_person']
+        to_messages = my_dataset[name]['to_messages']
+
+        fraction_from_poi = computeFraction( from_poi_to_this_person, to_messages)
+        my_dataset[name]["fraction_from_poi"]=fraction_from_poi
+
+        from_this_person_to_poi = my_dataset[name]['from_this_person_to_poi']
+        from_messages = my_dataset[name]["from_messages"]
+        fraction_to_poi = computeFraction( from_this_person_to_poi, from_messages) 
+        my_dataset[name]["fraction_to_poi"] = fraction_to_poi
+    return my_dataset
+
+def ShowCorrel(my_dataset):
+    dfCor= pd.DataFrame.from_dict(my_dataset,orient='index')
     dfCor.replace('NaN',np.NaN,inplace=True)
     #dfCor.dropna(axis=0,how='any',inplace=True)
     #print dfCor
-
     print dfCor.corr()
 ### features_list is a list of strings, each of which is a feature name.
 ### The first feature must be "poi".
@@ -175,7 +183,7 @@ are common, and areas around which pois are rare. Because the data is fairly spr
 def TuneDT(features, labels,features_list,folds = 100):    
     features_list.remove('poi')
     clf = tree.DecisionTreeClassifier(min_samples_split=2)
-    scaler = preprocessing.StandardScaler()
+    scaler = preprocessing.MinMaxScaler()
     KInit=4
     fs=SelectKBest(f_classif, k=KInit)
     cv = StratifiedShuffleSplit(labels,folds, random_state = 17)
@@ -187,9 +195,9 @@ def TuneDT(features, labels,features_list,folds = 100):
         Classifier__class_weight=[{0:.2,1:.8},{0:.15,1:.85},{0:.1,1:.9},'balanced'])
     clf_Grid = GridSearchCV(pipe,param_grid=params,cv=cv,scoring='f1_micro')
     clf_Grid.fit(features, labels)
-    #print("Best estimator found by grid search:")
-    #print clf_Grid.best_estimator_
+    print"Best estimator found by grid search:\n",clf_Grid.best_estimator_
     PipeOpt=clf_Grid.best_estimator_
+    np.set_printoptions(suppress=True)
     print('Best Params found by grid search: \n')
     print clf_Grid.best_params_
     my_features=[features_list[i]for i in PipeOpt.named_steps['Select_Features'].get_support(indices=True)]
@@ -197,10 +205,11 @@ def TuneDT(features, labels,features_list,folds = 100):
     print 'Features sorted by score(Biggest to Smallest):\n', [features_list[i] for i in np.argsort(PipeOpt.named_steps['Select_Features'].scores_)[::-1]]
     print 'Features Scores:\n',PipeOpt.named_steps['Select_Features'].scores_[::-1]
     print 'Features Scores 2:\n',np.argsort(PipeOpt.named_steps['Select_Features'].scores_)[::-1]
-    print 'Selected Features: \n',my_features
+    print 'My Selected Features: \n',my_features
     print 'Feature Importances:\n',PipeOpt.named_steps['Classifier'].feature_importances_
+    print 'Ucaido Example:\n', pd.DataFrame(PipeOpt.named_steps['Select_Features'].scores_,
+             index=features_list).sort()
     return PipeOpt
-
 '''
 ### Task 6: Dump your classifier, dataset, and features_list so anyone can
 ### check your results. You do not need to change anything below, but make sure
@@ -222,30 +231,36 @@ fraction_from_poi,fraction_to_poi
 #https://discussions.udacity.com/t/p5-testing-results-all-over-the-place/37850/9
 def main():
     data_dict = pickle.load(open("final_project_dataset.pkl", "r"))
-    data_dict=AddFeatures(data_dict)
     my_dataset=data_dict
-    #Removed features, with extremly high numbers of missing values,and\or
-    #are highly correlated with another feature.<--IS THIS A CORRECT STRATEGY?
-    exclude=['loan_advances','director_fees','restricted_stock_deferred',\
-    'deferral_payments','deferred_income',\
-    'exercised_stock_options','restricted_stock','other','email_address',\
-    'long_term_incentive']
-    #High Corr:'exercised_stock_options','restricted_stock_deferred',restricted_stock,'other'
-    #Feature Importance Corr:'shared_receipt_with_poi','from_poi_to_this_person'
-    ShowCorrel(my_dataset)
-    #Ex:Exclude Total_Stock_value and Excercised stock options, should one be excluded?
-    
-    #features_list= next(my_dataset.itervalues()).keys()
-    #for i in exclude:
-    #    features_list.remove(i)
-    #features_list.insert(0, features_list.pop(features_list.index('poi')))
-    #data = featureFormat(my_dataset,features_list,sort_keys = True)
+    my_dataset=AddFeatures(my_dataset)
+    #Exclude using Discretion. 
+    Exc1=['other','email_address']
+    #Replaced by creating better versions of the features
+    Exc2=["from_poi_to_this_person","to_messages","from_this_person_to_poi","from_messages"]
+
+    #Exclude because Highly Correlated
+    Exc3=['exercised_stock_options','restricted_stock',\
+    'long_term_incentive','total_payments','expenses','total_stock_value']
+    #Large Number of missing balues
+    Exc4=['director_fees','restricted_stock_deferred','deferral_payments']
+
+    exclude=Exc1+Exc2+Exc3+Exc4
+    #QueryDataSet(my_dataset)
+    features_list= next(my_dataset.itervalues()).keys()
+    #ShowCorrel(my_dataset,exclude)
+
+    for i in exclude:
+        features_list.remove(i)
+    features_list.insert(0, features_list.pop(features_list.index('poi')))
+    data = featureFormat(my_dataset,features_list,sort_keys = True)
     ### Extract features and labels from dataset for local testing
-    #labels,features = targetFeatureSplit(data)
-    #features_train,features_test,labels_train,labels_test= train_test_split(features,labels,\
-    #    test_size=.1,random_state=42,stratify=labels)    
-    #clf=TuneDT(features,labels,features_list)
-    #features_list.insert(0, 'poi')
-    #dump_classifier_and_data(clf, my_dataset, features_list)
-    #test_classifier(clf, my_dataset, features_list)
+    labels,features = targetFeatureSplit(data)
+    features_train,features_test,labels_train,labels_test= train_test_split(features,labels,\
+        test_size=.1,random_state=42,stratify=labels)
+    #clf=TuneDTPCA(features, labels,features_list,folds = 100)
+    clf=TuneDT(features,labels,features_list)
+    features_list.insert(0, 'poi')
+    dump_classifier_and_data(clf, my_dataset, features_list)
+    test_classifier(clf, my_dataset, features_list)
+
 main()

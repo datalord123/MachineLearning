@@ -203,8 +203,7 @@ def TuneDT(features, labels,features_list,folds = 100):
     my_features=[features_list[i]for i in PipeOpt.named_steps['Select_Features'].get_support(indices=True)]
     print 'Original Features List:\n',features_list
     print 'Features sorted by score(Biggest to Smallest):\n', [features_list[i] for i in np.argsort(PipeOpt.named_steps['Select_Features'].scores_)[::-1]]
-    print 'Features Scores:\n',PipeOpt.named_steps['Select_Features'].scores_[::-1]
-    print 'Features Scores 2:\n',np.argsort(PipeOpt.named_steps['Select_Features'].scores_)[::-1]
+    print 'Features Scores :\n', np.sort(PipeOpt.named_steps['Select_Features'].scores_)[::-1]
     print 'My Selected Features: \n',my_features
     print 'Feature Importances:\n',PipeOpt.named_steps['Classifier'].feature_importances_
     print 'Ucaido Example:\n', pd.DataFrame(PipeOpt.named_steps['Select_Features'].scores_,

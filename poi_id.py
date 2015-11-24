@@ -58,7 +58,10 @@ def QueryDataSet(my_dataset):
     dfPOI = pd.DataFrame.from_dict(FeatWNaNPOI, orient='index')
     dfPOI = dfPOI.rename(columns = {0: 'Missing Vals POI'})
     df=df.join(dfPOI)    
+    MisVal=df.sort('Missing Vals',ascending=0)
+    MisVal.to_csv('MissingValues.csv')
     print df.sort('Missing Vals',ascending=0)
+
 
 
 def PlotData(target,features,Title):
@@ -93,7 +96,7 @@ def DrawClusters(pred, features, poi, Title,name="image.png", f1_name="feature 1
 def Plot_n_Clustoids_AfterScaling(poi,finance_features):
     scaler = MinMaxScaler()
     rescaled_features = scaler.fit_transform(finance_features)
-    clust = KMeans(n_clusters=3)
+    clust = KMeans(n_clusters=2)
     #print finance_features
     pred = clust.fit_predict(rescaled_features)
     DrawClusters(pred, rescaled_features, poi,'Clusters After Scaling', name="clusters_after_scaling.pdf", f1_name='salary', f2_name='exercised_stock_options')
@@ -145,9 +148,10 @@ def AddFeatures(my_dataset):
 def ShowCorrel(my_dataset):
     dfCor= pd.DataFrame.from_dict(my_dataset,orient='index')
     dfCor.replace('NaN',np.NaN,inplace=True)
-    #dfCor.dropna(axis=0,how='any',inplace=True)
-    #print dfCor
-    print dfCor.corr()
+    CorTab= dfCor.corr()
+    print CorTab
+    CorTab.to_csv('CorrTable.csv')
+
 ### features_list is a list of strings, each of which is a feature name.
 ### The first feature must be "poi".
 
@@ -167,27 +171,66 @@ def ShowCorrel(my_dataset):
 ### function. Because of the small size of the dataset, the script uses
 ### stratified shuffle split cross validation. For more info: 
 ### http://scikit-learn.org/stable/modules/generated/sklearn.cross_validation.StratifiedShuffleSplit.html
-'''
-Support vectors are a very bad fit for this dataset, 
-because it is so sparse, distributed poorly, and highly imbalanced(email).
 
-When using an rbf kernel, the support vector classifier tries to find areas around which pois 
-are common, and areas around which pois are rare. Because the data is fairly spread out,
- and because there are so few pois, on this data set the SVC will end up essentially 
- building a small area around each poi, and then building enough areas to cover the 
- non-pois elsewhere. 
-'''
-#Maybe Try KNN after this.
+def TuneKNN(features, labels,features_list,folds = 100):    
+    features_list.remove('poi')
+    clf = KN.KNeighborsClassifier(n_neighbors=2)
+    KInit=4
+    scaler=preprocessing.MinMaxScaler()
+    fs=SelectKBest(f_classif, k=KInit)
+    cv = StratifiedShuffleSplit(labels,folds, random_state = 17)
+    pipe= Pipeline([('Scale',scaler),('Select_Features',fs),('Classifier',clf)])
+    params = dict(Classifier__weights=['uniform','distance'],
+        Classifier__algorithm=['auto','ball_tree','kd_tree','brute'],
+        Classifier__n_neighbors=[1,2,3,4,5])
+    clf_Grid = GridSearchCV(pipe,param_grid=params,cv=cv,scoring='f1_micro')
+    clf_Grid.fit(features, labels)
+    print"Best estimator found by grid search:\n",clf_Grid.best_estimator_
+    PipeOpt=clf_Grid.best_estimator_
+    np.set_printoptions(suppress=True)
+    print('Best Params found by grid search: \n')
+    print clf_Grid.best_params_
+    return PipeOpt
+
+def TuneSVM(features, labels,features_list,folds = 100):    
+    features_list.remove('poi')
+    clf = SVC(kernel='rbf')
+    KInit=4
+    fs=SelectKBest(f_classif, k=KInit)
+    cv = StratifiedShuffleSplit(labels,folds, random_state = 17)
+    pipe= Pipeline([('Select_Features',fs),('Classifier',clf)])
+    COpt=[1,10,100,1000,5000,10000]
+    GOpt=[1,10,25,50,75,90,100,'auto']
+    CritOpt=['rbf','sigmoid']
+    params = dict(Classifier__C=COpt,
+        Classifier__gamma=GOpt,
+        Classifier__kernel=CritOpt,
+        Classifier__class_weight=[{0:.2,1:.8},{0:.15,1:.85},{0:.1,1:.9},'balanced'])
+    clf_Grid = GridSearchCV(pipe,param_grid=params,cv=cv,scoring='f1_micro')
+    clf_Grid.fit(features, labels)
+    print"Best estimator found by grid search:\n",clf_Grid.best_estimator_
+    PipeOpt=clf_Grid.best_estimator_
+    np.set_printoptions(suppress=True)
+    print('Best Params found by grid search: \n')
+    print clf_Grid.best_params_
+    my_features=[features_list[i]for i in PipeOpt.named_steps['Select_Features'].get_support(indices=True)]
+    print 'Original Features List:\n',features_list
+    print 'Features sorted by score(Biggest to Smallest):\n', [features_list[i] for i in np.argsort(PipeOpt.named_steps['Select_Features'].scores_)[::-1]]
+    print 'Features Scores :\n', np.sort(PipeOpt.named_steps['Select_Features'].scores_)[::-1]
+    print 'My Selected Features: \n',my_features
+    #print 'Feature Importances:\n',PipeOpt.named_steps['Classifier'].feature_importances_
+    #print 'Dataframe Example:\n', pd.DataFrame(PipeOpt.named_steps['Select_Features'].scores_,
+    #         index=features_list).sort()
+    return PipeOpt
 
 #How do I use class_weight?
 def TuneDT(features, labels,features_list,folds = 100):    
     features_list.remove('poi')
     clf = tree.DecisionTreeClassifier(min_samples_split=2)
-    scaler = preprocessing.MinMaxScaler()
     KInit=4
     fs=SelectKBest(f_classif, k=KInit)
     cv = StratifiedShuffleSplit(labels,folds, random_state = 17)
-    pipe= Pipeline([('Scale_Features',scaler),('Select_Features',fs),('Classifier',clf)])
+    pipe= Pipeline([('Select_Features',fs),('Classifier',clf)])
     SplitOpt=range(1,50)
     CritOpt=['entropy','gini']
     params = dict(Classifier__min_samples_split=SplitOpt,
@@ -206,7 +249,26 @@ def TuneDT(features, labels,features_list,folds = 100):
     print 'Features Scores :\n', np.sort(PipeOpt.named_steps['Select_Features'].scores_)[::-1]
     print 'My Selected Features: \n',my_features
     print 'Feature Importances:\n',PipeOpt.named_steps['Classifier'].feature_importances_
-    print 'Ucaido Example:\n', pd.DataFrame(PipeOpt.named_steps['Select_Features'].scores_,
+    print 'Dataframe Example:\n', pd.DataFrame(PipeOpt.named_steps['Select_Features'].scores_,
+             index=features_list).sort()
+    return PipeOpt
+
+def NoTuneDT(features, labels,features_list,folds = 100):    
+    features_list.remove('poi')
+    clf = tree.DecisionTreeClassifier(min_samples_split=2)
+    KInit=4
+    fs=SelectKBest(f_classif, k=KInit)
+    cv = StratifiedShuffleSplit(labels,folds, random_state = 17)
+    PipeOpt= Pipeline([('Select_Features',fs),('Classifier',clf)])
+    PipeOpt.fit(features, labels)
+    np.set_printoptions(suppress=True)
+    my_features=[features_list[i]for i in PipeOpt.named_steps['Select_Features'].get_support(indices=True)]
+    print 'Original Features List:\n',features_list
+    print 'Features sorted by score(Biggest to Smallest):\n', [features_list[i] for i in np.argsort(PipeOpt.named_steps['Select_Features'].scores_)[::-1]]
+    print 'Features Scores :\n', np.sort(PipeOpt.named_steps['Select_Features'].scores_)[::-1]
+    print 'My Selected Features: \n',my_features
+    print 'Feature Importances:\n',PipeOpt.named_steps['Classifier'].feature_importances_
+    print 'Dataframe Example:\n', pd.DataFrame(PipeOpt.named_steps['Select_Features'].scores_,
              index=features_list).sort()
     return PipeOpt
 '''
@@ -233,21 +295,20 @@ def main():
     my_dataset=data_dict
     my_dataset=AddFeatures(my_dataset)
     #Exclude using Discretion. 
-    Exc1=['other','email_address']
+    Exc1=['email_address']
     #Replaced by creating better versions of the features
-    Exc2=["from_poi_to_this_person","to_messages","from_this_person_to_poi","from_messages"]
-
-    #Exclude because Highly Correlated
-    Exc3=['exercised_stock_options','restricted_stock',\
-    'long_term_incentive','total_payments','expenses','total_stock_value']
-    #Large Number of missing balues
-    Exc4=['director_fees','restricted_stock_deferred','deferral_payments']
-
-    exclude=Exc1+Exc2+Exc3+Exc4
+    Exc2=['to_messages','from_messages','from_this_person_to_poi',\
+    'from_poi_to_this_person']
+    #Exclude because Highly Correlated with stronger features
+    Exc3=['deferral_payments','expenses','deferred_income',\
+    'restricted_stock_deferred','director_fees',\
+    'long_term_incentive','bonus','total_payments',\
+    'salary','total_stock_value','restricted_stock',\
+    'exercised_stock_options','other',]
+    exclude=Exc1+Exc2+Exc3
     #QueryDataSet(my_dataset)
+    #ShowCorrel(my_dataset)
     features_list= next(my_dataset.itervalues()).keys()
-    #ShowCorrel(my_dataset,exclude)
-
     for i in exclude:
         features_list.remove(i)
     features_list.insert(0, features_list.pop(features_list.index('poi')))
@@ -256,10 +317,13 @@ def main():
     labels,features = targetFeatureSplit(data)
     features_train,features_test,labels_train,labels_test= train_test_split(features,labels,\
         test_size=.1,random_state=42,stratify=labels)
-    #clf=TuneDTPCA(features, labels,features_list,folds = 100)
-    clf=TuneDT(features,labels,features_list)
+    #clf=TuneSVM(features, labels,features_list)
+    #clf=TuneKNN(features, labels,features_list)
+    #clf=NoTuneDT(features, labels,features_list)
+    #clf=TuneDT(features,labels,features_list)
     features_list.insert(0, 'poi')
     dump_classifier_and_data(clf, my_dataset, features_list)
     test_classifier(clf, my_dataset, features_list)
+
 
 main()

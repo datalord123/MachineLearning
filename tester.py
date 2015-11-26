@@ -22,29 +22,38 @@ Recall: {:>0.{display_precision}f}\tF1: {:>0.{display_precision}f}\tF2: {:>0.{di
 RESULTS_FORMAT_STRING = "\tTotal predictions: {:4d}\tTrue positives: {:4d}\tFalse positives: {:4d}\tFalse negatives: {:4d}\tTrue negatives: {:4d}"
 
 def test_classifier(clf, dataset, feature_list, folds = 1000):
+    #print feature_list
+    #feature_list = next(dataset.itervalues()).keys()
+    #print feature_list
     data = featureFormat(dataset, feature_list, sort_keys = True)
     labels, features = targetFeatureSplit(data)
-    cv = StratifiedShuffleSplit(labels, folds, random_state = 42)
+    #Default in tester.py is 10% Split in poi_id.py code I am specifying 20%
+    cv = StratifiedShuffleSplit(labels, folds,random_state = 42)
     true_negatives = 0
     false_negatives = 0
     true_positives = 0
     false_positives = 0
+
     for train_indices, test_indices in cv:
         features_train = [features[ii] for ii in train_indices]
         features_test = [features[ii] for ii in test_indices]
         labels_train = [labels[ii] for ii in train_indices]
-        labels_test = [labels[ii] for ii in test_indices]        
+        labels_test = [labels[ii] for ii in test_indices]
+                       
         ### fit the classifier using training set, and test on test set
-        clf.fit(features_train, labels_train)
+        try:
+            clf.fit(features_train, labels_train)
+        except:
+            clf.fit(np.array(features_train), np.array(labels_train))                
         predictions = clf.predict(features_test)
-        for prediction, truth in zip(predictions, labels_test):
-            if prediction == 0 and truth == 0:
+        for predictions, truth in zip(predictions, labels_test):
+            if predictions == 0 and truth == 0:
                 true_negatives += 1
-            elif prediction == 0 and truth == 1:
+            elif predictions == 0 and truth == 1:
                 false_negatives += 1
-            elif prediction == 1 and truth == 0:
+            elif predictions == 1 and truth == 0:
                 false_positives += 1
-            elif prediction == 1 and truth == 1:
+            elif predictions == 1 and truth == 1:
                 true_positives += 1
             else:
                 print "Warning: Found a predicted label not == 0 or 1."
@@ -89,3 +98,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+
